@@ -41,7 +41,7 @@ Faraday
 
 ### Recon
 As usual initial enumeration is required to port scanning and get relevant information. I always use `nmap` to scan network.
-```
+```bash
     ❯ nmap 10.13.37.14
     Nmap scan report for 10.13.37.14  
     PORT     STATE SERVICE
