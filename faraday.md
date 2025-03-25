@@ -1,6 +1,6 @@
     Writeup HackTheBox Faraday                             
 
-![XploitOverload](./XploitOverload_HackTheBox_Faraday_files/profile.jpg)
+![XploitOverload](./XploitOverload_HackTheBox_Faraday_files/profile.png)
 
 XploitOverload
 ========
